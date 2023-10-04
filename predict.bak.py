@@ -32,12 +32,6 @@ from transformers import CLIPImageProcessor
 
 from dataset_and_utils import TokenEmbeddingsHandler
 
-# TODO from https://github.com/replicate/lora-inference/blob/main/predict.py
-from lora_diffusion import LoRAManager, monkeypatch_remove_lora
-# from t2i_adapters import Adapter
-# from t2i_adapters import patch_pipe as patch_pipe_t2i_adapter
-# from PIL import Image
-
 SDXL_MODEL_CACHE = "./sdxl-cache"
 REFINER_MODEL_CACHE = "./refiner-cache"
 SAFETY_CACHE = "./safety-cache"
@@ -260,34 +254,10 @@ class Predictor(BasePredictor):
     @torch.inference_mode()
     def predict(
         self,
-        # prompt: str = Input(
-        #     description="Input prompt",
-        #     default="An astronaut riding a rainbow unicorn",
-        # ),
-         # TODO from https://github.com/replicate/lora-inference/blob/main/predict.py
         prompt: str = Input(
-            description="Input prompt. Use <1>, <2>, <3>, etc., to specify LoRA concepts",
-            default="a photo of <1> riding a horse on mars",
-        ),        
-        lora_urls: str = Input(
-            description="List of urls for safetensors of lora models, seperated with | .",
-            default="",
+            description="Input prompt",
+            default="An astronaut riding a rainbow unicorn",
         ),
-        lora_scales: str = Input(
-            description="List of scales for safetensors of lora models, seperated with | ",
-            default="0.5",
-        ),
-        
-        adapter_condition_image: Path = Input(
-            description="(T2I-adapter) Adapter Condition Image to gain extra control over generation. If this is not none, T2I adapter will be invoked. Width, Height of this image must match the above parameter, or dimension of the Img2Img image.",
-            default=None,
-        ),
-        adapter_type: str = Input(
-            description="(T2I-adapter) Choose an adapter type for the additional condition.",
-            choices=["sketch", "seg", "keypose", "depth"],
-            default="sketch",
-        ),
-
         negative_prompt: str = Input(
             description="Input Negative Prompt",
             default="",
@@ -424,16 +394,6 @@ class Predictor(BasePredictor):
             sdxl_kwargs["cross_attention_kwargs"] = {"scale": lora_scale}
 
         output = pipe(**common_args, **sdxl_kwargs)
-        # TODO 
-        if len(lora_urls) > 0:
-            lora_urls = [u.strip() for u in lora_urls.split("|")]
-            lora_scales = [float(s.strip()) for s in lora_scales.split("|")]
-            self.set_lora(lora_urls, lora_scales)
-            prompt = self.lora_manager.prompt(prompt)
-        else:
-            print("No LoRA models provided, using default model...")
-            monkeypatch_remove_lora(self.pipe.unet)
-            monkeypatch_remove_lora(self.pipe.text_encoder)
 
         if refine in ["expert_ensemble_refiner", "base_image_refiner"]:
             refiner_kwargs = {
@@ -468,22 +428,3 @@ class Predictor(BasePredictor):
             )
 
         return output_paths
-    
-    def set_lora(self, urllists: List[str], scales: List[float]):
-        assert len(urllists) == len(scales), "Number of LoRAs and scales must match."
-
-        merged_fn = url_local_fn(f"{'-'.join(urllists)}")
-
-        if self.loaded == merged_fn:
-            print("The requested LoRAs are loaded.")
-            assert self.lora_manager is not None
-        else:
-
-            st = time.time()
-            self.lora_manager = LoRAManager(
-                [download_lora(url) for url in urllists], self.pipe
-            )
-            self.loaded = merged_fn
-            print(f"merging time: {time.time() - st}")
-
-        self.lora_manager.tune(scales)

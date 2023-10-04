@@ -497,6 +497,8 @@ def load_and_save_masks_and_captions(
         print("Image files: ", files)
     images = [Image.open(file).convert("RGB") for file in files]
 
+    #TODO: for multiple concept file (furnitures in the same file, add )
+
     # captions
     if caption_csv:
         print(f"Using provided captions")
