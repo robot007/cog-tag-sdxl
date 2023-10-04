@@ -1,4 +1,5 @@
 import hashlib
+from hashlib import sha512
 import json
 import os
 import shutil
@@ -33,6 +34,9 @@ from transformers import CLIPImageProcessor
 from dataset_and_utils import TokenEmbeddingsHandler
 
 # TODO from https://github.com/replicate/lora-inference/blob/main/predict.py
+import requests
+import time
+
 from lora_diffusion import LoRAManager, monkeypatch_remove_lora
 # from t2i_adapters import Adapter
 # from t2i_adapters import patch_pipe as patch_pipe_t2i_adapter
@@ -47,6 +51,32 @@ REFINER_URL = (
     "https://weights.replicate.delivery/default/sdxl/refiner-no-vae-no-encoder-1.0.tar"
 )
 SAFETY_URL = "https://weights.replicate.delivery/default/sdxl/safety-1.0.tar"
+
+# TODO from https://github.com/replicate/lora-inference/blob/main/predict.py
+def url_local_fn(url):
+    #TODO remove
+    print(f'using url {url}')
+    return sha512(url.encode()).hexdigest() + ".safetensors"
+
+def download_lora(url):
+    # TODO: allow-list of domains
+    print(f'download_lora url {url}')
+
+    fn = url_local_fn(url)
+
+    if not os.path.exists(fn):
+        print("Downloading LoRA model... from", url)
+        # stream chunks of the file to disk
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(fn, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+    else:
+        print("Using disk cache...")
+
+    return fn
 
 
 class KarrasDPM:
@@ -242,6 +272,9 @@ class Predictor(BasePredictor):
         print("setup took: ", time.time() - start)
         # self.txt2img_pipe.__class__.encode_prompt = new_encode_prompt
 
+        # TODO from https://github.com/replicate/lora-inference/blob/main/predict.py#L5
+        self.loaded = None
+
     def load_image(self, path):
         shutil.copyfile(path, "/tmp/image.png")
         return load_image("/tmp/image.png").convert("RGB")
@@ -428,7 +461,7 @@ class Predictor(BasePredictor):
         if len(lora_urls) > 0:
             lora_urls = [u.strip() for u in lora_urls.split("|")]
             lora_scales = [float(s.strip()) for s in lora_scales.split("|")]
-            self.set_lora(lora_urls, lora_scales)
+            self.set_lora(lora_urls, lora_scales, pipe)
             prompt = self.lora_manager.prompt(prompt)
         else:
             print("No LoRA models provided, using default model...")
@@ -469,7 +502,7 @@ class Predictor(BasePredictor):
 
         return output_paths
     
-    def set_lora(self, urllists: List[str], scales: List[float]):
+    def set_lora(self, urllists: List[str], scales: List[float], generic_pipe):
         assert len(urllists) == len(scales), "Number of LoRAs and scales must match."
 
         merged_fn = url_local_fn(f"{'-'.join(urllists)}")
@@ -481,7 +514,7 @@ class Predictor(BasePredictor):
 
             st = time.time()
             self.lora_manager = LoRAManager(
-                [download_lora(url) for url in urllists], self.pipe
+                [download_lora(url) for url in urllists], generic_pipe
             )
             self.loaded = merged_fn
             print(f"merging time: {time.time() - st}")
