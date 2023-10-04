@@ -1,8 +1,11 @@
 cog==0.8.6
 diffusers
+transformers
 fire==0.5.0
 huggingface-hub==0.17.3
 keras==2.13.1
 numpy==1.24.3
 Pandas==2.1.1
 replicate==0.13.0
+tensorrt
+tensorflow-gpu==2.8.0

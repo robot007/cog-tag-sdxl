@@ -1,3 +1,5 @@
+import pdb
+
 import hashlib
 from hashlib import sha512
 import json
@@ -41,6 +43,8 @@ from lora_diffusion import LoRAManager, monkeypatch_remove_lora
 # from t2i_adapters import Adapter
 # from t2i_adapters import patch_pipe as patch_pipe_t2i_adapter
 # from PIL import Image
+
+print('start')
 
 SDXL_MODEL_CACHE = "./sdxl-cache"
 REFINER_MODEL_CACHE = "./refiner-cache"
